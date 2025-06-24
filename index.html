@@ -1,0 +1,176 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Complete Quiz App</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    .choice-button {
+      display: block;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+      cursor: pointer;
+    }
+    .choice-button:hover { background: #e0e0e0; }
+    .correct { background: #c8e6c9; }
+    .wrong { background: #ffcdd2; }
+    button { margin: 10px 5px; padding: 10px 20px; }
+  </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+<h2 id="question-number">Question</h2>
+<p id="question">Loading...</p>
+<div id="choices"></div>
+<div id="result"></div>
+<p id="progress">Progress: 0 / 0 | ✅ Correct: 0 | ❌ Wrong: 0</p>
+
+<button onclick="nextQuestion()">Next</button>
+<button onclick="resetQuiz()">Reset</button>
+<button onclick="shuffleAndRestart()">🔀 Shuffle</button>
+<button onclick="saveProgress('save1')">Save 1</button>
+<button onclick="saveProgress('save2')">Save 2</button>
+<button onclick="loadProgress('save1')">Load 1</button>
+<button onclick="loadProgress('save2')">Load 2</button>
+<button id="exportPdfBtn" onclick="downloadWrongAnswers()">📄 Export Wrong Answers</button>
+
+<script src="questions.js"></script>
+<script>
+let quizData = [];
+let originalQuizData = [];
+let current = 0;
+let wrongAnswers = [];
+let totalAnswered = 0;
+let correctCount = 0;
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function loadQuestion() {
+  const q = quizData[current];
+  document.getElementById("question-number").textContent = "Question " + (current + 1);
+  document.getElementById("question").textContent = q.question;
+  const choicesEl = document.getElementById("choices");
+  choicesEl.innerHTML = "";
+  q.choices.forEach(choice => {
+    const btn = document.createElement("button");
+    btn.textContent = choice;
+    btn.className = "choice-button";
+    btn.onclick = () => {
+      totalAnswered++;
+
+      if (choice === q.correct) {
+        btn.classList.add("correct");
+      correctCount++;
+      } else {
+        btn.classList.add("wrong");
+        wrongAnswers.push({ question: q.question, selected: choice, correct: q.correct });
+      updateProgressBar();
+      }
+      Array.from(choicesEl.children).forEach(b => b.disabled = true);
+    };
+    choicesEl.appendChild(btn);
+  });
+}
+
+function nextQuestion() {
+  if (current < quizData.length - 1) {
+    current++;
+    updateProgressBar();
+  loadQuestion();
+  } else {
+    document.getElementById("result").textContent = "Quiz complete!";
+  }
+}
+
+function resetQuiz() {
+  totalAnswered = 0;
+  correctCount = 0;
+  current = 0;
+  wrongAnswers = [];
+  document.getElementById("result").textContent = "";
+  updateProgressBar();
+  loadQuestion();
+}
+
+function shuffleAndRestart() {
+  quizData = shuffle([...originalQuizData]);
+  resetQuiz();
+}
+
+function saveProgress(slot) {
+  localStorage.setItem("quiz_save_" + slot, JSON.stringify({
+    current,
+    wrongAnswers,
+    correctCount,
+    totalAnswered
+  }));
+  alert("Progress saved to " + slot);
+}
+
+function loadProgress(slot) {
+  const saved = localStorage.getItem("quiz_save_" + slot);
+  if (saved) {
+    const data = JSON.parse(saved);
+    current = data.current;
+    wrongAnswers = data.wrongAnswers || [];
+    correctCount = data.correctCount || 0;
+    totalAnswered = data.totalAnswered || 0;
+    document.getElementById("result").textContent = "";
+    updateProgressBar();
+    loadQuestion();
+  } else {
+    alert("No save found in " + slot);
+  }
+}
+
+
+window.onload = function () {
+  if (typeof quizDataFromFile !== "undefined" && Array.isArray(quizDataFromFile)) {
+    quizData = [...quizDataFromFile];
+    originalQuizData = [...quizDataFromFile];
+    updateProgressBar();
+  loadQuestion();
+  } else {
+    document.getElementById("question").textContent = "Error: quiz data not found.";
+  }
+};
+</script>
+</body>
+</html>
+
+<script>
+function updateProgressBar() {
+  const wrongCount = totalAnswered - correctCount;
+  document.getElementById("progress").textContent =
+    `Progress: ${totalAnswered} / ${quizData.length} | ✅ Correct: ${correctCount} | ❌ Wrong: ${wrongCount}`;
+}
+</script>
+
+<script>
+function downloadWrongAnswers() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(12);
+  doc.text("Wrong Answers", 10, 10);
+  let y = 20;
+  wrongAnswers.forEach((entry, idx) => {
+    doc.text((idx + 1) + ". " + entry.question, 10, y);
+    doc.text("   Your Answer: " + entry.selected, 10, y + 6);
+    doc.text("   Correct Answer: " + entry.correct, 10, y + 12);
+    y += 20;
+    if (y > 270) { doc.addPage(); y = 10; }
+  });
+  doc.save("wrong_answers.pdf");
+}
+</script>
